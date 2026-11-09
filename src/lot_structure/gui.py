@@ -8,11 +8,11 @@ from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import QSettings, Qt, QUrl
-from PySide6.QtGui import QCloseEvent, QDesktopServices
+from PySide6.QtGui import QBrush, QCloseEvent, QColor, QDesktopServices
 from PySide6.QtWidgets import (QApplication, QButtonGroup, QComboBox, QCompleter, QFileDialog,
                                QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
-                               QProgressBar, QPushButton, QRadioButton, QSpinBox, QVBoxLayout,
-                               QWidget)
+                               QProgressBar, QPushButton, QRadioButton, QSpinBox, QTreeWidget,
+                               QTreeWidgetItem, QVBoxLayout, QWidget)
 
 from lot_structure import VERSION
 from lot_structure import tree
@@ -91,7 +91,7 @@ class Window(QWidget):
         self.settings = settings if settings is not None else QSettings('Lot Structure', APP)
         self.path_eng, self.path_cust = path_eng, path_cust
         self.setWindowTitle(f'{APP} {VERSION}')
-        self.setMinimumWidth(640)
+        self.setMinimumWidth(1000)
 
         title = QLabel('Create a measurement lot folder tree')
         title.setObjectName('Title')
@@ -170,17 +170,43 @@ class Window(QWidget):
         button_row.addStretch()
         button_row.addWidget(self.create_button)
 
+        # ---------- 4. Preview ----------
+        self.preview = QTreeWidget()
+        self.preview.setHeaderHidden(True)
+        self.preview.setUniformRowHeights(True)
+        self.preview_count = hint()
+        expand = QPushButton('Expand all')
+        expand.clicked.connect(self.preview.expandAll)
+        collapse = QPushButton('Collapse')
+        collapse.clicked.connect(self.collapse_preview)
+        preview_buttons = QHBoxLayout()
+        preview_buttons.addWidget(self.preview_count, 1)
+        preview_buttons.addWidget(expand)
+        preview_buttons.addWidget(collapse)
+        preview_box = QGroupBox('4.  Preview')
+        preview_layout = QVBoxLayout(preview_box)
+        preview_layout.addWidget(self.preview, 1)
+        preview_layout.addLayout(preview_buttons)
+        preview_layout.addWidget(hint('Grey = already exists, it is left as it is.'))
+        self._preview_key: tuple | None = None
+
+        left = QVBoxLayout()
+        left.addWidget(what_box)
+        left.addWidget(where_box)
+        left.addWidget(lot_box)
+        left.addWidget(self.target)
+        left.addWidget(self.note)
+        left.addStretch()
+        columns = QHBoxLayout()
+        columns.addLayout(left, 3)
+        columns.addWidget(preview_box, 2)
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 12, 16, 12)
         layout.addWidget(title)
         layout.addWidget(hint('Nothing is ever overwritten or deleted - only missing folders are '
                               'made. Running it again on an existing lot only ADDS missing folders.'))
-        layout.addWidget(what_box)
-        layout.addWidget(where_box)
-        layout.addWidget(lot_box)
-        layout.addWidget(self.target)
-        layout.addWidget(self.note)
-        layout.addStretch()
+        layout.addLayout(columns, 1)
         layout.addLayout(button_row)
 
         self._listed: dict[Path, list[str]] = {}
@@ -247,6 +273,63 @@ class Window(QWidget):
         for label in (self.target, self.note):
             label.style().unpolish(label)
             label.style().polish(label)
+        self.show_preview(lot_root, req.num_bu, req.num_panel)
+
+    # ---------- preview ----------
+    def show_preview(self, lot_root: Path | None, num_bu: int, num_panel: int) -> None:
+        """The tree that Create makes; what already exists is grey."""
+        key = (lot_root, num_bu, num_panel)
+        if key == self._preview_key:
+            return
+        self._preview_key = key
+        root = lot_root if lot_root is not None else Path('lot')
+        check = lot_root is not None and lot_root.is_dir()
+        self.preview.setUpdatesEnabled(False)
+        self.preview.clear()
+        items: dict[tuple[str, ...], QTreeWidgetItem] = {}
+        leaves = existing = 0
+        for folder in tree.lot_folders(root, num_bu, num_panel):
+            parts = folder.relative_to(root).parts
+            parent = None
+            for depth in range(len(parts)):
+                path = parts[:depth + 1]
+                if path not in items:
+                    item = QTreeWidgetItem([parts[depth]])
+                    if parent is None:
+                        self.preview.addTopLevelItem(item)
+                    else:
+                        parent.addChild(item)
+                    items[path] = item
+                parent = items[path]
+            leaves += 1
+            if check and folder.is_dir():
+                existing += 1
+                parent.setData(0, Qt.ItemDataRole.UserRole, True)
+        for index in range(self.preview.topLevelItemCount()):
+            self._grey_when_all_exist(self.preview.topLevelItem(index))
+        self.collapse_preview()
+        self.preview.setUpdatesEnabled(True)
+        if existing:
+            self.preview_count.setText(f'{leaves} end folders: {leaves - existing} new, '
+                                       f'{existing} already exist')
+        else:
+            self.preview_count.setText(f'{leaves} end folders, all new')
+
+    def _grey_when_all_exist(self, item: QTreeWidgetItem) -> bool:
+        if item.childCount():
+            results = [self._grey_when_all_exist(item.child(i)) for i in range(item.childCount())]
+            exists = all(results)
+        else:
+            exists = bool(item.data(0, Qt.ItemDataRole.UserRole))
+        if exists:
+            item.setForeground(0, QBrush(QColor('#9aa5b1')))
+            item.setToolTip(0, 'already exists')
+        return exists
+
+    def collapse_preview(self) -> None:
+        """Tools and build-ups open, the rest closed."""
+        self.preview.collapseAll()
+        self.preview.expandToDepth(1)
 
     def fill_lists(self, req: Request) -> None:
         """NEW LOT: the dropdowns list the projects / part numbers that are already there."""
@@ -342,6 +425,7 @@ class Window(QWidget):
             self.setEnabled(True)
             self.progress.hide()
         self._listed.clear()
+        self._preview_key = None          # check again what exists now
         self.save_choices()
         self.refresh()
 

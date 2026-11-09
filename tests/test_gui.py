@@ -158,3 +158,46 @@ def test_remembers_last_choices(tmp_path):
     assert not second.new_project.isChecked() and not second.new_lot.isChecked()
     second.close()
     app.processEvents()
+
+
+def preview_texts(window):
+    found = []
+
+    def walk(item, path):
+        path = path + (item.text(0),)
+        found.append(('/'.join(path), item.foreground(0).color().name()))
+        for i in range(item.childCount()):
+            walk(item.child(i), path)
+
+    for i in range(window.preview.topLevelItemCount()):
+        walk(window.preview.topLevelItem(i), ())
+    return dict(found)
+
+
+def test_preview_matches_what_create_makes(window, tmp_path):
+    names = preview_texts(window)
+    leaves = {name for name in names if name.endswith(('/Front', '/Back'))}
+    assert leaves == {p.relative_to(tmp_path).as_posix() for p in tree.lot_folders(tmp_path, 5, 5)}
+    assert 'QVM/BU-01/Post ADP (Core Alignment)' in names
+    assert window.preview_count.text() == '310 end folders, all new'
+    window.num_bu.setValue(1)
+    window.num_panel.setValue(1)
+    assert window.preview_count.text() == f'{len(tree.lot_folders(tmp_path, 1, 1))} end folders, all new'
+
+
+def test_preview_shows_existing_folders_grey(window, tmp_path):
+    window.new_lot.setChecked(True)
+    window.project.setText('Proj')
+    window.part.setText('Part')
+    window.lot.setText('1')
+    window.num_bu.setValue(1)
+    window.create()
+    total = len(tree.lot_folders(tmp_path, 1, 5))
+    assert window.preview_count.text() == f'{total} end folders: 0 new, {total} already exist'
+    window.num_bu.setValue(2)
+    added = len(tree.lot_folders(tmp_path, 2, 5)) - total
+    assert window.preview_count.text() == f'{total + added} end folders: {added} new, {total} already exist'
+    names = preview_texts(window)
+    assert names['AOI/BU-01'] == '#9aa5b1'                 # all there: grey
+    assert names['AOI/BU-02'] != '#9aa5b1'                 # new
+    assert names['AOI'] != '#9aa5b1'                       # partly new

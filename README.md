@@ -29,6 +29,9 @@ The window remembers your last choices (Engineering / Customer / other folder, p
 build-ups, panels) for each Windows user. NEW PROJECT / NEW LOT is asked every time and Lot Number
 starts empty.
 
+On the right, **Preview** shows the tree Create will make and how many end folders are new;
+folders that already exist are grey.
+
 The window shows where the lot will go, or what is still missing. **Create** shows the summary to
 check, then makes the folders and tells how many new folders were made. **Open folder** there
 opens the lot in Explorer.
