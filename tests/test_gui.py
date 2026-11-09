@@ -23,8 +23,13 @@ def window(tmp_path, monkeypatch):
                         lambda *a, **k: QtWidgets.QMessageBox.StandardButton.Yes)
     monkeypatch.setattr(QtWidgets.QMessageBox, 'information', lambda _w, _t, text: shown.append(text))
     monkeypatch.setattr(QtWidgets.QMessageBox, 'warning', lambda _w, _t, text: shown.append(text))
+    opened = []
+    monkeypatch.setattr(gui, 'open_folder', opened.append)
     win = gui.Window(str(eng), str(cust))
+    win.open_pressed = False
+    monkeypatch.setattr(win, 'done', lambda text, warning=False: shown.append(text) or win.open_pressed)
     win.shown = shown
+    win.opened = opened
     yield win
     win.close()
     app.processEvents()
@@ -96,3 +101,32 @@ def test_new_lot_dropdowns_list_existing_folders(window, tmp_path):
     assert items(window.project) == ['CustProj']
     assert window.project.text() == 'Proj'             # what was typed is kept
     assert items(window.part) == []
+
+
+def test_open_folder_after_create(window, tmp_path):
+    window.new_lot.setChecked(True)
+    window.project.setText('Proj')
+    window.part.setText('Part')
+    window.lot.setText('19178.02')
+    window.create()
+    assert window.opened == []                          # Close pressed
+    window.open_pressed = True
+    window.create()
+    assert window.opened == [tmp_path / 'eng' / 'Proj' / 'Part' / '19178.02']
+
+
+def test_done_message_has_open_folder_button(tmp_path, monkeypatch):
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    win = gui.Window(str(tmp_path), str(tmp_path))
+    seen = {}
+
+    def press(box):
+        seen['buttons'] = [b.text() for b in box.buttons()]
+        box.defaultButton().click()
+        return 0
+
+    monkeypatch.setattr(QtWidgets.QMessageBox, 'exec', press)
+    assert win.done('Done.') is True
+    assert 'Open folder' in seen['buttons']
+    win.close()
+    app.processEvents()

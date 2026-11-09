@@ -7,7 +7,8 @@ import traceback
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QUrl
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (QApplication, QButtonGroup, QComboBox, QCompleter, QFileDialog,
                                QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
                                QProgressBar, QPushButton, QRadioButton, QSpinBox, QVBoxLayout,
@@ -319,11 +320,26 @@ class Window(QWidget):
         if failed:
             shown = '\n'.join(f'{folder}\n    {error}' for folder, error in failed[:10])
             more = f'\n... and {len(failed) - 10} more' if len(failed) > 10 else ''
-            QMessageBox.warning(self, APP, f'{text}\n\n{len(failed)} folders could not be made:\n'
-                                           f'{shown}{more}')
+            text += f'\n\n{len(failed)} folders could not be made:\n{shown}{more}'
         else:
-            QMessageBox.information(self, APP, f'{text}\n\n{lot_root}')
+            text += f'\n\n{lot_root}'
+        if self.done(text, warning=bool(failed)) and lot_root.is_dir():
+            open_folder(lot_root)
 
+    def done(self, text: str, warning: bool = False) -> bool:
+        """The result, with an Open folder button. True when Open folder was pressed."""
+        box = QMessageBox(QMessageBox.Icon.Warning if warning else QMessageBox.Icon.Information,
+                          APP, text, parent=self)
+        open_button = box.addButton('Open folder', QMessageBox.ButtonRole.AcceptRole)
+        box.addButton(QMessageBox.StandardButton.Close)
+        box.setDefaultButton(open_button)
+        box.exec()
+        return box.clickedButton() is open_button
+
+
+def open_folder(path: Path) -> None:
+    """Show the folder in Explorer (Finder / file manager elsewhere)."""
+    QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
 
 def start(project_dir: Path) -> int:
     app = QApplication.instance() or QApplication(sys.argv)

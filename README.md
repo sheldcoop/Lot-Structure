@@ -26,7 +26,8 @@ Project, Part Number and Lot Number may not hold `\ / : * ? " < > |` (Windows do
 them in a folder name); dots are fine (`19178.02`).
 
 The window shows where the lot will go, or what is still missing. **Create** shows the summary to
-check, then makes the folders and tells how many new folders were made.
+check, then makes the folders and tells how many new folders were made. **Open folder** there
+opens the lot in Explorer.
 
 ## The tree
 Every end folder has `Panel-01 … Panel-NN\Front|Back` under it.
