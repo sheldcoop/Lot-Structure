@@ -7,8 +7,8 @@ import traceback
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QUrl
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtCore import QSettings, Qt, QUrl
+from PySide6.QtGui import QCloseEvent, QDesktopServices
 from PySide6.QtWidgets import (QApplication, QButtonGroup, QComboBox, QCompleter, QFileDialog,
                                QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
                                QProgressBar, QPushButton, QRadioButton, QSpinBox, QVBoxLayout,
@@ -84,8 +84,11 @@ class FolderBox(QComboBox):
 
 
 class Window(QWidget):
-    def __init__(self, path_eng: str = tree.PATH_ENG, path_cust: str = tree.PATH_CUST) -> None:
+    def __init__(self, path_eng: str = tree.PATH_ENG, path_cust: str = tree.PATH_CUST,
+                 settings: QSettings | None = None) -> None:
         super().__init__()
+        # last choices, per Windows user (registry); a test passes its own file
+        self.settings = settings if settings is not None else QSettings('Lot Structure', APP)
         self.path_eng, self.path_cust = path_eng, path_cust
         self.setWindowTitle(f'{APP} {VERSION}')
         self.setMinimumWidth(640)
@@ -191,6 +194,7 @@ class Window(QWidget):
         for spin in (self.num_bu, self.num_panel):
             spin.valueChanged.connect(self.refresh)
         self.other_path.textEdited.connect(lambda: self.other.setChecked(True))
+        self.load_choices()
         self.refresh()
 
     # ---------- reading the window ----------
@@ -256,6 +260,32 @@ class Window(QWidget):
         self.project.set_names(projects)
         self.part.set_names(parts)
 
+    # ---------- last choices ----------
+    def load_choices(self) -> None:
+        """The choices of last time. New project / New lot is asked every time; Lot starts empty."""
+        value = self.settings.value
+        {CUST: self.cust, OTHER: self.other}.get(value('base', ENG), self.eng).setChecked(True)
+        self.other_path.setText(str(value('other_path', '')))
+        self.project.setText(str(value('project', '')))
+        self.part.setText(str(value('part', '')))
+        for spin, key in ((self.num_bu, 'num_bu'), (self.num_panel, 'num_panel')):
+            try:
+                spin.setValue(int(value(key, 5)))
+            except (TypeError, ValueError):
+                spin.setValue(5)
+
+    def save_choices(self) -> None:
+        req = self.request()
+        for key, val in (('base', req.base), ('other_path', req.other_path),
+                         ('project', req.project), ('part', req.part),
+                         ('num_bu', req.num_bu), ('num_panel', req.num_panel)):
+            self.settings.setValue(key, val)
+        self.settings.sync()
+
+    def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
+        self.save_choices()
+        super().closeEvent(event)
+
     def listing(self, path: Path) -> list[str]:
         """The folders in path, read once (not again for every key typed)."""
         if path not in self._listed:
@@ -312,6 +342,7 @@ class Window(QWidget):
             self.setEnabled(True)
             self.progress.hide()
         self._listed.clear()
+        self.save_choices()
         self.refresh()
 
         text = f'Done. Created {made} new folders.'

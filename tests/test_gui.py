@@ -12,6 +12,11 @@ QtWidgets = pytest.importorskip('PySide6.QtWidgets')
 from lot_structure import gui, tree  # noqa: E402
 
 
+def settings(tmp_path):
+    from PySide6.QtCore import QSettings
+    return QSettings(str(tmp_path / 'settings.ini'), QSettings.Format.IniFormat)
+
+
 @pytest.fixture()
 def window(tmp_path, monkeypatch):
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
@@ -25,7 +30,7 @@ def window(tmp_path, monkeypatch):
     monkeypatch.setattr(QtWidgets.QMessageBox, 'warning', lambda _w, _t, text: shown.append(text))
     opened = []
     monkeypatch.setattr(gui, 'open_folder', opened.append)
-    win = gui.Window(str(eng), str(cust))
+    win = gui.Window(str(eng), str(cust), settings(tmp_path))
     win.open_pressed = False
     monkeypatch.setattr(win, 'done', lambda text, warning=False: shown.append(text) or win.open_pressed)
     win.shown = shown
@@ -117,7 +122,7 @@ def test_open_folder_after_create(window, tmp_path):
 
 def test_done_message_has_open_folder_button(tmp_path, monkeypatch):
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
-    win = gui.Window(str(tmp_path), str(tmp_path))
+    win = gui.Window(str(tmp_path), str(tmp_path), settings(tmp_path))
     seen = {}
 
     def press(box):
@@ -129,4 +134,27 @@ def test_done_message_has_open_folder_button(tmp_path, monkeypatch):
     assert win.done('Done.') is True
     assert 'Open folder' in seen['buttons']
     win.close()
+    app.processEvents()
+
+
+def test_remembers_last_choices(tmp_path):
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    first = gui.Window(str(tmp_path), str(tmp_path), settings(tmp_path))
+    assert first.eng.isChecked() and first.num_bu.value() == 5     # nothing saved yet
+    first.new_lot.setChecked(True)
+    first.cust.setChecked(True)
+    first.project.setText('Proj')
+    first.part.setText('Part')
+    first.lot.setText('19178.02')
+    first.num_bu.setValue(7)
+    first.num_panel.setValue(3)
+    first.close()
+
+    second = gui.Window(str(tmp_path), str(tmp_path), settings(tmp_path))
+    assert second.cust.isChecked()
+    assert (second.project.text(), second.part.text()) == ('Proj', 'Part')
+    assert (second.num_bu.value(), second.num_panel.value()) == (7, 3)
+    assert second.lot.text() == ''                                  # lot starts empty
+    assert not second.new_project.isChecked() and not second.new_lot.isChecked()
+    second.close()
     app.processEvents()
