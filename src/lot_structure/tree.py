@@ -86,6 +86,20 @@ def clean_name(text: str) -> str:
     return text.replace('"', '').strip()
 
 
+NOT_ALLOWED = '\\/:*?"<>|'   # Windows does not allow these in a folder name
+
+
+def bad_name(label: str, name: str) -> str:
+    """What is wrong with a typed folder name ('' when it is fine). Dots are fine (19178.02)."""
+    if not name:
+        return f'{label} cannot be empty.'
+    for char in name:
+        if char in NOT_ALLOWED:
+            return (f'{label}: character {char} is not allowed in a folder name.\n'
+                    f'Not allowed: {" ".join(NOT_ALLOWED)}')
+    return ''
+
+
 def clean_path(text: str) -> str:
     """A typed / pasted path without quotes, surrounding spaces and a trailing backslash."""
     text = clean_name(text)
@@ -136,26 +150,25 @@ def resolve(req: Request, path_eng: str = PATH_ENG,
     if req.part_from_path:
         part_root = base
     elif req.new_project:
-        if not project:
-            return None, 'Project name cannot be empty.'
-        if not part:
-            return None, 'Part Number cannot be empty.'
+        problem = bad_name('Project name', project) or bad_name('Part Number', part)
+        if problem:
+            return None, problem
         part_root = base / project / part
     else:
-        if not project:
-            return None, 'Project name cannot be empty.'
+        if problem := bad_name('Project name', project):
+            return None, problem
         if not (base / project).is_dir():
             return None, (f'Project not found:\n{base / project}\n'
                           'Check the spelling, or choose New project.')
-        if not part:
-            return None, 'Part Number cannot be empty.'
+        if problem := bad_name('Part Number', part):
+            return None, problem
         if not (base / project / part).is_dir():
             return None, f'Part Number not found:\n{base / project / part}'
         part_root = base / project / part
 
     lot = clean_name(req.lot)
-    if not lot:
-        return None, 'Lot Number cannot be empty.'
+    if problem := bad_name('Lot Number', lot):
+        return None, problem
     if req.num_bu < 1:
         return None, 'Build-Ups must be a whole number of 1 or more.'
     if req.num_panel < 1:

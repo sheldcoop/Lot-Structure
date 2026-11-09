@@ -168,3 +168,25 @@ def test_subfolders_sorted_folders_only(tmp_path):
     (tmp_path / 'file.txt').write_text('x')
     assert tree.subfolders(tmp_path) == ['A', 'b', 'c']
     assert tree.subfolders(tmp_path / 'missing') == []
+
+
+@pytest.mark.parametrize('lot', ['19178/02', '19178\\02', '19:02', 'a*b', 'a?b', 'a<b', 'a>b', 'a|b'])
+def test_lot_with_character_windows_does_not_allow(bases, lot):
+    found, problem = resolve(Request(new_project=True, project='A', part='B', lot=lot), bases)
+    assert found is None
+    assert problem.startswith('Lot Number: character ')
+
+
+@pytest.mark.parametrize('lot', ['19178.02', '19555', '19178.01 rework', '19178_02-A'])
+def test_lot_names_that_are_fine(bases, lot):
+    req = Request(new_project=True, project='A', part='B', lot=lot)
+    assert resolve(req, bases) == (Path(bases[0]) / 'A' / 'B' / lot, '')
+
+
+def test_project_and_part_with_character_windows_does_not_allow(bases):
+    _, problem = resolve(Request(new_project=True, project='A/B', part='P', lot='1'), bases)
+    assert problem.startswith('Project name: character /')
+    _, problem = resolve(Request(new_project=True, project='A', part='P:1', lot='1'), bases)
+    assert problem.startswith('Part Number: character :')
+    _, problem = resolve(Request(new_project=False, project='Chiplet4Future', part='F|1', lot='1'), bases)
+    assert problem.startswith('Part Number: character |')

@@ -22,6 +22,9 @@ installs PySide6, which takes a minute.
    folder and the lot is made directly in it.
 3. **Lot**: Lot Number (e.g. `19555` or `19178.01`), Build-Ups and Panels (5 each by default).
 
+Project, Part Number and Lot Number may not hold `\ / : * ? " < > |` (Windows does not allow
+them in a folder name); dots are fine (`19178.02`).
+
 The window shows where the lot will go, or what is still missing. **Create** shows the summary to
 check, then makes the folders and tells how many new folders were made.
 
