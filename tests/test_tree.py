@@ -160,3 +160,11 @@ def test_base_must_exist(bases, tmp_path):
     assert lot is None and problem.startswith('That folder does not exist')
     lot, problem = resolve(Request(new_project=True, base=OTHER, project='A', part='B', lot='1'), bases)
     assert lot is None and problem == 'Type, paste or browse to a folder.'
+
+
+def test_subfolders_sorted_folders_only(tmp_path):
+    for name in ('b', 'A', 'c', '.hidden'):
+        (tmp_path / name).mkdir()
+    (tmp_path / 'file.txt').write_text('x')
+    assert tree.subfolders(tmp_path) == ['A', 'b', 'c']
+    assert tree.subfolders(tmp_path / 'missing') == []

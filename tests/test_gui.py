@@ -71,3 +71,28 @@ def test_missing_input_is_shown_not_created(window, tmp_path):
     window.create()
     assert window.shown[-1] == 'Part Number cannot be empty.'
     assert not (tmp_path / 'eng' / 'New').exists()
+
+
+def items(box):
+    return [box.itemText(i) for i in range(box.count())]
+
+
+def test_new_lot_dropdowns_list_existing_folders(window, tmp_path):
+    (tmp_path / 'eng' / 'Proj' / 'Part2').mkdir()
+    (tmp_path / 'eng' / 'Other').mkdir()
+    (tmp_path / 'cust' / 'CustProj').mkdir()
+    window.new_project.setChecked(True)
+    assert items(window.project) == []                 # new project: typed
+    window.new_lot.setChecked(True)
+    assert items(window.project) == ['Other', 'Proj']
+    assert items(window.part) == []
+    window.project.setCurrentIndex(1)                  # pick Proj
+    assert window.project.text() == 'Proj'
+    assert items(window.part) == ['Part', 'Part2']
+    window.part.setText('Part2')                       # typing still works
+    window.lot.setText('1')
+    assert str(tmp_path / 'eng' / 'Proj' / 'Part2' / '1') in window.target.text()
+    window.cust.setChecked(True)
+    assert items(window.project) == ['CustProj']
+    assert window.project.text() == 'Proj'             # what was typed is kept
+    assert items(window.part) == []

@@ -15,7 +15,8 @@ installs PySide6, which takes a minute.
 
 ## Using it
 1. **What**: NEW PROJECT (type project, part number and lot) or NEW LOT (add a lot to a project
-   that already exists; the project and part folder must be there).
+   that already exists; the project and part folder must be there). For a NEW LOT, Project and
+   Part Number are dropdowns of the folders that are already there; typing still works.
 2. **Where**: Engineering lots (default), Customer shippable lots, or **Other folder** (type /
    paste a path or *Browse*). For a NEW LOT in an other folder, that folder **is** the part
    folder and the lot is made directly in it.

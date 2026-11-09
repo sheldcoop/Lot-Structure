@@ -8,9 +8,10 @@ from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (QApplication, QButtonGroup, QFileDialog, QFormLayout, QGroupBox,
-                               QHBoxLayout, QLabel, QLineEdit, QMessageBox, QProgressBar,
-                               QPushButton, QRadioButton, QSpinBox, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QApplication, QButtonGroup, QComboBox, QCompleter, QFileDialog,
+                               QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
+                               QProgressBar, QPushButton, QRadioButton, QSpinBox, QVBoxLayout,
+                               QWidget)
 
 from lot_structure import VERSION
 from lot_structure import tree
@@ -41,6 +42,44 @@ def hint(text: str = '') -> QLabel:
     label.setWordWrap(True)
     label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
     return label
+
+
+class FolderBox(QComboBox):
+    """A name you can type, or pick from the folders that are already there."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setEditable(True)
+        self.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        self.setMaxVisibleItems(20)
+        completer = QCompleter(self.model(), self)
+        completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        completer.setFilterMode(Qt.MatchFlag.MatchContains)
+        completer.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
+        self.setCompleter(completer)
+        self._names: list[str] = []
+
+    def text(self) -> str:
+        return self.currentText()
+
+    def setText(self, text: str) -> None:  # noqa: N802
+        self.setEditText(text)
+
+    def setPlaceholderText(self, text: str) -> None:  # noqa: N802
+        self.lineEdit().setPlaceholderText(text)
+
+    def set_names(self, names: list[str]) -> None:
+        """Fill the list, keeping what is typed."""
+        if names == self._names:
+            return
+        self._names = names
+        text = self.currentText()
+        self.blockSignals(True)
+        self.clear()
+        self.addItems(names)
+        self.setCurrentIndex(-1)
+        self.setEditText(text)
+        self.blockSignals(False)
 
 
 class Window(QWidget):
@@ -92,8 +131,8 @@ class Window(QWidget):
         where_layout.addWidget(self.other_hint)
 
         # ---------- 3. Lot ----------
-        self.project = QLineEdit()
-        self.part = QLineEdit()
+        self.project = FolderBox()
+        self.part = FolderBox()
         self.lot = QLineEdit()
         self.lot.setPlaceholderText('e.g. 19555 or 19178.01')
         self.num_bu = QSpinBox()
@@ -140,10 +179,14 @@ class Window(QWidget):
         layout.addStretch()
         layout.addLayout(button_row)
 
+        self._listed: dict[Path, list[str]] = {}
         for button in (self.new_project, self.new_lot, self.eng, self.cust, self.other):
+            button.toggled.connect(self._listed.clear)   # read the folders again
             button.toggled.connect(self.refresh)
-        for edit in (self.other_path, self.project, self.part, self.lot):
+        for edit in (self.other_path, self.lot):
             edit.textChanged.connect(self.refresh)
+        for box in (self.project, self.part):
+            box.editTextChanged.connect(self.refresh)
         for spin in (self.num_bu, self.num_panel):
             spin.valueChanged.connect(self.refresh)
         self.other_path.textEdited.connect(lambda: self.other.setChecked(True))
@@ -180,6 +223,7 @@ class Window(QWidget):
         else:
             self.project.setPlaceholderText('e.g. Chiplet4Future')
             self.part.setPlaceholderText('e.g. FHR0089')
+        self.fill_lists(req)
 
         lot_root, problem = self.resolve()
         if lot_root is None:
@@ -198,6 +242,24 @@ class Window(QWidget):
         for label in (self.target, self.note):
             label.style().unpolish(label)
             label.style().polish(label)
+
+    def fill_lists(self, req: Request) -> None:
+        """NEW LOT: the dropdowns list the projects / part numbers that are already there."""
+        projects, parts = [], []
+        if req.new_project is False and not req.part_from_path:
+            base = Path(tree.base_path(req, self.path_eng, self.path_cust))
+            projects = self.listing(base)
+            project = tree.clean_name(req.project)
+            if project in projects:
+                parts = self.listing(base / project)
+        self.project.set_names(projects)
+        self.part.set_names(parts)
+
+    def listing(self, path: Path) -> list[str]:
+        """The folders in path, read once (not again for every key typed)."""
+        if path not in self._listed:
+            self._listed[path] = tree.subfolders(path)
+        return self._listed[path]
 
     def pick_folder(self) -> None:
         start = tree.clean_path(self.other_path.text()) or self.path_eng
@@ -248,6 +310,7 @@ class Window(QWidget):
             QApplication.restoreOverrideCursor()
             self.setEnabled(True)
             self.progress.hide()
+        self._listed.clear()
         self.refresh()
 
         text = f'Done. Created {made} new folders.'

@@ -71,6 +71,16 @@ def lot_folders(lot_root: Path, num_bu: int, num_panel: int) -> list[Path]:
     return folders
 
 
+def subfolders(path: Path) -> list[str]:
+    """The folder names inside path, sorted (empty when it cannot be read)."""
+    try:
+        names = [entry.name for entry in path.iterdir()
+                 if entry.is_dir() and not entry.name.startswith('.')]
+    except OSError:
+        return []
+    return sorted(names, key=str.casefold)
+
+
 def clean_name(text: str) -> str:
     """A typed name without quotes and surrounding spaces."""
     return text.replace('"', '').strip()
